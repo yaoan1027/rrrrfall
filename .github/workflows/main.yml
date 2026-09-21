@@ -1,0 +1,37 @@
+name: Daily Smart Commute Alert
+
+on:
+  workflow_dispatch: # 支援手動觸發測試
+  schedule:
+    # UTC 23:00 = 台灣時間 07:00 (平日週一至週五，對應 UTC 週日至週四)
+    - cron: '0 23 * * 0-4'
+
+jobs:
+  commute-alert:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Commute Alert Script
+        env:
+          CWA_API_KEY: ${{ secrets.CWA_API_KEY }}
+          MOENV_API_KEY: ${{ secrets.MOENV_API_KEY }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TARGET_LOCATION: "臺北市"
+          TARGET_AQI_SITE: "中山"
+        run: |
+          python main.py
