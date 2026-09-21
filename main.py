@@ -9,47 +9,10 @@ def get_env_variable(var_name: str) -> str:
         sys.exit(1)
     return val
 
-def fetch_weather_data(api_key: str, location_name: str = "臺北市"):
-    """
-    串接氣象署 F-C0032-001 (一般天氣預報-今明36小時天氣預報)
-    取得當天最高溫度 (MaxT) 與最高降雨機率 (PoP)
-    """
-    url = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001"
-    params = {
-        "Authorization": api_key,
-        "locationName": location_name
-    }
-    
-    resp = requests.get(url, params=params, timeout=15)
-    if resp.status_code != 200:
-        raise Exception(f"氣象 API 請求失敗，HTTP {resp.status_code}: {resp.text}")
-        
-    data = resp.json()
-    if not data.get("success") == "true":
-        raise Exception(f"氣象 API 回傳錯誤：{data.get('message')}")
-        
-    records = data["records"]["location"][0]["weatherElement"]
-    
-    max_pop = 0
-    max_temp = -99.0
-
-    for element in records:
-        if element["elementName"] == "PoP":
-            for time_slot in element["time"]:
-                pop_val = int(time_slot["parameter"]["parameterName"])
-                if pop_val > max_pop:
-                    max_pop = pop_val
-        elif element["elementName"] == "MaxT":
-            for time_slot in element["time"]:
-                temp_val = float(time_slot["parameter"]["parameterName"])
-                if temp_val > max_temp:
-                    max_temp = temp_val
-
-    return max_temp, max_pop
-
 def fetch_aqi_data(api_key: str, sitename: str = "中山"):
     """
     串接環境部空氣品質指標 (AQI) API (aqx_p_432)
+    相容 dict 與 list 兩種回傳格式
     """
     url = "https://data.moenv.gov.tw/api/v2/aqx_p_432"
     params = {
@@ -63,14 +26,25 @@ def fetch_aqi_data(api_key: str, sitename: str = "中山"):
     if resp.status_code != 200:
         raise Exception(f"環境部 AQI API 請求失敗，HTTP {resp.status_code}: {resp.text}")
         
-    records = resp.json().get("records", [])
+    data = resp.json()
+
+    # 相容處理：若回傳是 list 則直接使用；若是 dict 則取 records 鍵
+    if isinstance(data, list):
+        records = data
+    elif isinstance(data, dict):
+        records = data.get("records", [])
+    else:
+        records = []
+
     for rec in records:
         if rec.get("sitename") == sitename:
             aqi_val = rec.get("aqi")
-            return int(aqi_val) if aqi_val and aqi_val.isdigit() else 0
+            return int(aqi_val) if aqi_val and str(aqi_val).isdigit() else 0
             
-    if records and records[0].get("aqi", "").isdigit():
+    # 若無指定測站，嘗試取第一筆有效資料
+    if records and str(records[0].get("aqi", "")).isdigit():
         return int(records[0]["aqi"])
+        
     return 0
 
 def generate_commute_alert(location: str, max_temp: float, max_pop: int, aqi: int) -> str:
